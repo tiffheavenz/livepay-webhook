@@ -3,22 +3,140 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-echo "START<br>";
+/* ================= TELEGRAM ================= */
 
-try {
+$botToken = "YOUR_BOT_TOKEN";
+$chatId   = "YOUR_CHAT_ID";
 
-    $pdo = new PDO(
-        "mysql:host=sql309.byetcluster.com;dbname=b5_42074304_shjeeeee;charset=utf8mb4",
-        "b5_42074304",
-        "tiffheavenz"
+/* ================= SECRET ================= */
+
+$secret = "MY_SUPER_SECRET_KEY";
+
+/* ================= WEBSITE WEBHOOK ================= */
+
+$websiteWebhook = "https://shjeeee.byethost5.com/Shjeeee/webhook.php";
+
+/* ================= RECEIVE PAYLOAD ================= */
+
+$payload = file_get_contents("php://input");
+
+/* ================= STORE PAYLOAD ================= */
+
+file_put_contents(
+    __DIR__."/webhook_log.txt",
+    date("Y-m-d H:i:s")."\n".$payload."\n\n",
+    FILE_APPEND
+);
+
+/* ================= EMPTY REQUEST ================= */
+
+if (empty(trim($payload))) {
+    exit("No payload");
+}
+
+/* ================= DECODE JSON ================= */
+
+$data = json_decode($payload, true);
+
+if (json_last_error() !== JSON_ERROR_NONE) {
+
+    file_get_contents(
+        "https://api.telegram.org/bot{$botToken}/sendMessage?" .
+        http_build_query([
+            "chat_id" => $chatId,
+            "text" => "❌ INVALID JSON RECEIVED\n\n".$payload
+        ])
     );
 
-    echo "CONNECTED";
-
-} catch (Throwable $e) {
-
-    echo $e->getMessage();
-
+    exit("Invalid JSON");
 }
+
+/* ================= VALUES ================= */
+
+$status    = strtoupper(trim($data['status'] ?? 'UNKNOWN'));
+$reference = trim($data['customer_reference'] ?? 'N/A');
+$number    = trim($data['msisdn'] ?? 'N/A');
+$amount    = number_format((float)($data['amount'] ?? 0));
+$provider  = trim($data['provider'] ?? 'N/A');
+$message1  = trim($data['message'] ?? '');
+$time      = trim($data['completed_at'] ?? '');
+
+/* ================= TELEGRAM MESSAGE ================= */
+
+$title = ($status === "SUCCESS")
+    ? "✅ PAYMENT STATUS: SUCCESS"
+    : "❌ PAYMENT STATUS: FAILED";
+
+$message  = $title."\n\n";
+$message .= "📌 Reference: ".$reference."\n";
+$message .= "📱 Number: ".$number."\n";
+$message .= "💰 Amount: UGX ".$amount."\n";
+$message .= "🏦 Provider: ".$provider."\n";
+$message .= "📝 Message: ".$message1."\n";
+$message .= "🕒 Time: ".$time;
+
+/* ================= SEND TELEGRAM ================= */
+
+file_get_contents(
+    "https://api.telegram.org/bot{$botToken}/sendMessage?" .
+    http_build_query([
+        "chat_id" => $chatId,
+        "text" => $message
+    ])
+);
+
+/* ================= DON'T FORWARD FAILED PAYMENTS ================= */
+
+if ($status !== "SUCCESS") {
+
+    file_put_contents(
+        __DIR__."/failed_log.txt",
+        date("Y-m-d H:i:s")."\n".$payload."\n\n",
+        FILE_APPEND
+    );
+
+    echo "FAILED PAYMENT - NOT FORWARDED";
+    exit;
+}
+
+/* ================= FORWARD SUCCESS TO WEBSITE ================= */
+
+$ch = curl_init($websiteWebhook);
+
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_POSTFIELDS => $payload,
+    CURLOPT_HTTPHEADER => [
+        "Content-Type: application/json",
+        "X-Secret: ".$secret
+    ],
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT => 30
+]);
+
+$response = curl_exec($ch);
+
+if (curl_errno($ch)) {
+
+    file_put_contents(
+        __DIR__."/webhook_error.log",
+        date("Y-m-d H:i:s")."\n".
+        curl_error($ch)."\n\n",
+        FILE_APPEND
+    );
+
+} else {
+
+    file_put_contents(
+        __DIR__."/forward_log.txt",
+        date("Y-m-d H:i:s")."\n".
+        $response."\n\n",
+        FILE_APPEND
+    );
+}
+
+curl_close($ch);
+
+echo "OK";
 
 ?>
