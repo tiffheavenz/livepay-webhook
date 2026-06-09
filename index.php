@@ -20,12 +20,13 @@ try {
     $pdo = new PDO(
         "mysql:host=$db_host;dbname=$db_name;charset=utf8mb4",
         $db_user,
-        $db_pass
+        $db_pass,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+        ]
     );
 
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-} catch (Throwable $e) {
+} catch (PDOException $e) {
 
     file_put_contents(
         __DIR__ . "/db_error.txt",
@@ -34,10 +35,10 @@ try {
         FILE_APPEND
     );
 
-    exit("DB ERROR");
+    die($e->getMessage());
 }
 
-/* ================= RECEIVE PAYLOAD ================= */
+/* ================= RECEIVE JSON ================= */
 
 $payload = file_get_contents("php://input");
 
@@ -47,8 +48,6 @@ file_put_contents(
     $payload . "\n\n",
     FILE_APPEND
 );
-
-/* ================= DECODE JSON ================= */
 
 $data = json_decode($payload, true);
 
@@ -89,62 +88,40 @@ $message .= "🕒 Time: " . $time;
     ])
 );
 
-/* ================= IGNORE FAILED PAYMENTS ================= */
+/* ================= IGNORE FAILED ================= */
 
 if ($status !== "SUCCESS") {
-
-    file_put_contents(
-        __DIR__ . "/failed_log.txt",
-        date("Y-m-d H:i:s") . "\n" .
-        $payload . "\n\n",
-        FILE_APPEND
-    );
-
     exit("IGNORED");
 }
 
 /* ================= UPDATE DEPOSIT ================= */
 
-try {
+$stmt = $pdo->prepare("
+    UPDATE deposits
+    SET
+        status='success',
+        transaction_id=?,
+        gateway_message=?,
+        updated_at=NOW()
+    WHERE reference=?
+    AND status='pending'
+");
 
-    $stmt = $pdo->prepare("
-        UPDATE deposits
-        SET
-            status = 'success',
-            transaction_id = ?,
-            gateway_message = ?,
-            updated_at = NOW()
-        WHERE reference = ?
-        AND status = 'pending'
-    ");
+$stmt->execute([
+    $transaction_id,
+    $message1,
+    $reference
+]);
 
-    $stmt->execute([
-        $transaction_id,
-        $message1,
-        $reference
-    ]);
+file_put_contents(
+    __DIR__ . "/update_log.txt",
+    date("Y-m-d H:i:s") .
+    "\nReference: " . $reference .
+    "\nRows Updated: " . $stmt->rowCount() .
+    "\n\n",
+    FILE_APPEND
+);
 
-    file_put_contents(
-        __DIR__ . "/update_log.txt",
-        date("Y-m-d H:i:s") .
-        "\nReference: " . $reference .
-        "\nRows Updated: " . $stmt->rowCount() .
-        "\n\n",
-        FILE_APPEND
-    );
-
-    echo "OK";
-
-} catch (Throwable $e) {
-
-    file_put_contents(
-        __DIR__ . "/update_error.txt",
-        date("Y-m-d H:i:s") . "\n" .
-        $e->getMessage() . "\n\n",
-        FILE_APPEND
-    );
-
-    exit("UPDATE ERROR");
-}
+echo "OK";
 
 ?>
