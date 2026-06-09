@@ -16,6 +16,7 @@ $db_user = "b5_42074304";
 $db_pass = "tiffheavenz";
 
 try {
+
     $pdo = new PDO(
         "mysql:host=$db_host;dbname=$db_name;charset=utf8mb4",
         $db_user,
@@ -24,8 +25,16 @@ try {
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
         ]
     );
+
 } catch (PDOException $e) {
-    die($e->getMessage());
+
+    file_put_contents(
+        __DIR__ . "/db_error.txt",
+        date("Y-m-d H:i:s") . "\n" . $e->getMessage() . "\n\n",
+        FILE_APPEND
+    );
+
+    exit("DB ERROR");
 }
 
 /* ================= RECEIVE PAYLOAD ================= */
@@ -33,27 +42,29 @@ try {
 $payload = file_get_contents("php://input");
 
 file_put_contents(
-    __DIR__."/webhook_log.txt",
-    date("Y-m-d H:i:s")."\n".$payload."\n\n",
+    __DIR__ . "/webhook_log.txt",
+    date("Y-m-d H:i:s") . "\n" . $payload . "\n\n",
     FILE_APPEND
 );
 
-/* ================= DECODE JSON ================= */
+/* ================= DECODE ================= */
 
 $data = json_decode($payload, true);
 
 if (!$data) {
-    exit("Invalid JSON");
+    exit("INVALID JSON");
 }
 
-$status    = strtoupper(trim($data['status'] ?? ''));
-$reference = trim($data['customer_reference'] ?? '');
-$number    = $data['msisdn'] ?? '';
-$amount    = number_format($data['amount'] ?? 0);
-$provider  = $data['provider'] ?? '';
-$message1  = $data['message'] ?? '';
-$time      = $data['completed_at'] ?? '';
-$transaction_id = $data['internal_reference'] ?? '';
+/* ================= VALUES ================= */
+
+$status         = strtoupper(trim($data['status'] ?? ''));
+$reference      = trim($data['customer_reference'] ?? '');
+$transaction_id = trim($data['internal_reference'] ?? '');
+$message1       = trim($data['message'] ?? '');
+$number         = trim($data['msisdn'] ?? '');
+$amount         = number_format($data['amount'] ?? 0);
+$provider        = trim($data['provider'] ?? '');
+$time            = trim($data['completed_at'] ?? '');
 
 /* ================= TELEGRAM ================= */
 
@@ -61,15 +72,15 @@ $title = ($status == "SUCCESS")
     ? "✅ PAYMENT STATUS: SUCCESS"
     : "❌ PAYMENT STATUS: FAILED";
 
-$message  = $title."\n\n";
-$message .= "📌 Reference: ".$reference."\n";
-$message .= "📱 Number: ".$number."\n";
-$message .= "💰 Amount: UGX ".$amount."\n";
-$message .= "🏦 Provider: ".$provider."\n";
-$message .= "📝 Message: ".$message1."\n";
-$message .= "🕒 Time: ".$time;
+$message  = $title . "\n\n";
+$message .= "📌 Reference: " . $reference . "\n";
+$message .= "📱 Number: " . $number . "\n";
+$message .= "💰 Amount: UGX " . $amount . "\n";
+$message .= "🏦 Provider: " . $provider . "\n";
+$message .= "📝 Message: " . $message1 . "\n";
+$message .= "🕒 Time: " . $time;
 
-file_get_contents(
+@file_get_contents(
     "https://api.telegram.org/bot{$botToken}/sendMessage?" .
     http_build_query([
         "chat_id" => $chatId,
@@ -77,47 +88,62 @@ file_get_contents(
     ])
 );
 
-/* ================= ONLY PROCESS SUCCESS ================= */
+/* ================= IGNORE FAILED ================= */
 
 if ($status !== "SUCCESS") {
 
     file_put_contents(
-        __DIR__."/failed_log.txt",
-        date("Y-m-d H:i:s")."\n".$payload."\n\n",
+        __DIR__ . "/failed_log.txt",
+        date("Y-m-d H:i:s") . "\n" . $payload . "\n\n",
         FILE_APPEND
     );
 
-    exit("Ignored");
+    exit("IGNORED");
 }
 
 /* ================= UPDATE DEPOSIT ================= */
 
-$stmt = $pdo->prepare("
-    UPDATE deposits
-    SET
-        status='success',
-        transaction_id=?,
-        gateway_message=?,
-        updated_at=NOW()
-    WHERE reference=?
-    AND status='pending'
-");
+try {
 
-$stmt->execute([
-    $transaction_id,
-    $message1,
-    $reference
-]);
+    $stmt = $pdo->prepare("
+        UPDATE deposits
+        SET
+            status = 'success',
+            transaction_id = ?,
+            gateway_message = ?,
+            updated_at = NOW()
+        WHERE reference = ?
+        AND status = 'pending'
+    ");
 
-/* ================= DEBUG RESULT ================= */
+    $stmt->execute([
+        $transaction_id,
+        $message1,
+        $reference
+    ]);
 
-file_put_contents(
-    __DIR__."/update_log.txt",
-    date("Y-m-d H:i:s")
-    . "\nReference: ".$reference
-    . "\nRows Updated: ".$stmt->rowCount()
-    . "\n\n",
-    FILE_APPEND
-);
+    file_put_contents(
+        __DIR__ . "/update_log.txt",
+        date("Y-m-d H:i:s")
+        . "\nReference: " . $reference
+        . "\nRows Updated: " . $stmt->rowCount()
+        . "\n\n",
+        FILE_APPEND
+    );
+
+} catch (Throwable $e) {
+
+    file_put_contents(
+        __DIR__ . "/update_error.txt",
+        date("Y-m-d H:i:s")
+        . "\n" . $e->getMessage()
+        . "\n\n",
+        FILE_APPEND
+    );
+
+    exit("UPDATE ERROR");
+}
 
 echo "OK";
+
+?>
