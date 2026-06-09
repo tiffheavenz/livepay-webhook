@@ -20,17 +20,17 @@ try {
     $pdo = new PDO(
         "mysql:host=$db_host;dbname=$db_name;charset=utf8mb4",
         $db_user,
-        $db_pass,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
-        ]
+        $db_pass
     );
 
-} catch (PDOException $e) {
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+} catch (Throwable $e) {
 
     file_put_contents(
         __DIR__ . "/db_error.txt",
-        date("Y-m-d H:i:s") . "\n" . $e->getMessage() . "\n\n",
+        date("Y-m-d H:i:s") . "\n" .
+        $e->getMessage() . "\n\n",
         FILE_APPEND
     );
 
@@ -43,11 +43,12 @@ $payload = file_get_contents("php://input");
 
 file_put_contents(
     __DIR__ . "/webhook_log.txt",
-    date("Y-m-d H:i:s") . "\n" . $payload . "\n\n",
+    date("Y-m-d H:i:s") . "\n" .
+    $payload . "\n\n",
     FILE_APPEND
 );
 
-/* ================= DECODE ================= */
+/* ================= DECODE JSON ================= */
 
 $data = json_decode($payload, true);
 
@@ -63,8 +64,8 @@ $transaction_id = trim($data['internal_reference'] ?? '');
 $message1       = trim($data['message'] ?? '');
 $number         = trim($data['msisdn'] ?? '');
 $amount         = number_format($data['amount'] ?? 0);
-$provider        = trim($data['provider'] ?? '');
-$time            = trim($data['completed_at'] ?? '');
+$provider       = trim($data['provider'] ?? '');
+$time           = trim($data['completed_at'] ?? '');
 
 /* ================= TELEGRAM ================= */
 
@@ -88,13 +89,14 @@ $message .= "🕒 Time: " . $time;
     ])
 );
 
-/* ================= IGNORE FAILED ================= */
+/* ================= IGNORE FAILED PAYMENTS ================= */
 
 if ($status !== "SUCCESS") {
 
     file_put_contents(
         __DIR__ . "/failed_log.txt",
-        date("Y-m-d H:i:s") . "\n" . $payload . "\n\n",
+        date("Y-m-d H:i:s") . "\n" .
+        $payload . "\n\n",
         FILE_APPEND
     );
 
@@ -124,26 +126,25 @@ try {
 
     file_put_contents(
         __DIR__ . "/update_log.txt",
-        date("Y-m-d H:i:s")
-        . "\nReference: " . $reference
-        . "\nRows Updated: " . $stmt->rowCount()
-        . "\n\n",
+        date("Y-m-d H:i:s") .
+        "\nReference: " . $reference .
+        "\nRows Updated: " . $stmt->rowCount() .
+        "\n\n",
         FILE_APPEND
     );
+
+    echo "OK";
 
 } catch (Throwable $e) {
 
     file_put_contents(
         __DIR__ . "/update_error.txt",
-        date("Y-m-d H:i:s")
-        . "\n" . $e->getMessage()
-        . "\n\n",
+        date("Y-m-d H:i:s") . "\n" .
+        $e->getMessage() . "\n\n",
         FILE_APPEND
     );
 
     exit("UPDATE ERROR");
 }
-
-echo "OK";
 
 ?>
