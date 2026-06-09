@@ -85,40 +85,55 @@ if ($status !== "SUCCESS") {
     exit;
 }
 
-/* ================= FORWARD TO WEBSITE ================= */
+<?php
 
-$ch = curl_init($websiteWebhook);
+$db_host = "sql309.byetcluster.com";
+$db_name = "b5_42074304_shjeeeee";
+$db_user = "b5_42074304";
+$db_pass = "tiffheavenz";
 
-curl_setopt_array($ch, [
-    CURLOPT_POST => true,
-    CURLOPT_POSTFIELDS => $payload,
-    CURLOPT_HTTPHEADER => [
-        "Content-Type: application/json",
-        "X-Secret: ".$secret
-    ],
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT => 30,
-    CURLOPT_SSL_VERIFYPEER => false,
-    CURLOPT_SSL_VERIFYHOST => false
-]);
-
-$response = curl_exec($ch);
-
-$error = curl_error($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-file_put_contents(
-    __DIR__."/forward_log.txt",
-    date("Y-m-d H:i:s")."\n".
-    "HTTP CODE: ".$httpCode."\n".
-    "CURL ERROR: ".$error."\n".
-    "RESPONSE:\n".$response."\n\n",
-    FILE_APPEND
+$pdo = new PDO(
+    "mysql:host=$db_host;dbname=$db_name;charset=utf8mb4",
+    $db_user,
+    $db_pass,
+    [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+    ]
 );
 
-curl_close($ch);
+/* RECEIVE JSON */
+$payload = file_get_contents("php://input");
+$data = json_decode($payload, true);
+
+/* ONLY SUCCESS */
+$status = strtoupper(trim($data['status'] ?? ''));
+
+if ($status !== "SUCCESS") {
+    exit("Ignored");
+}
+
+/* VALUES */
+$reference      = trim($data['customer_reference'] ?? '');
+$transaction_id = trim($data['internal_reference'] ?? '');
+$message        = trim($data['message'] ?? '');
+
+/* UPDATE DEPOSIT */
+$stmt = $pdo->prepare("
+    UPDATE deposits
+    SET
+        status='success',
+        transaction_id=?,
+        gateway_message=?,
+        updated_at=NOW()
+    WHERE reference=?
+    AND status='pending'
+");
+
+$stmt->execute([
+    $transaction_id,
+    $message,
+    $reference
+]);
 
 echo "OK";
-
 ?>
-
