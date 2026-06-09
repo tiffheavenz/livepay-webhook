@@ -32,13 +32,34 @@ file_put_contents(
 
 /* ================= SEND TELEGRAM IMMEDIATELY ================= */
 
-$message = "🚨 WEBHOOK RECEIVED ON RENDER\n\n";
+```php
+/* ================= FORMAT TELEGRAM MESSAGE ================= */
 
-if (!empty($payload)) {
-    $message .= $payload;
+$data = json_decode($payload, true);
+
+$status    = strtoupper($data['status'] ?? 'UNKNOWN');
+$reference = $data['customer_reference'] ?? 'N/A';
+$number    = $data['msisdn'] ?? 'N/A';
+$amount    = number_format($data['amount'] ?? 0);
+$provider  = $data['provider'] ?? 'N/A';
+$message1  = $data['message'] ?? '';
+$time      = $data['completed_at'] ?? '';
+
+if ($status == "SUCCESS") {
+    $title = "✅ PAYMENT STATUS: SUCCESS";
 } else {
-    $message .= "No payload received";
+    $title = "❌ PAYMENT STATUS: FAILED";
 }
+
+$message = $title . "\n\n";
+$message .= "📌 Reference: " . $reference . "\n";
+$message .= "📱 Number: " . $number . "\n";
+$message .= "💰 Amount: UGX " . $amount . "\n";
+$message .= "🏦 Provider: " . $provider . "\n";
+$message .= "📝 Message: " . $message1 . "\n";
+$message .= "🕒 Time: " . $time;
+```
+
 
 $telegramUrl = "https://api.telegram.org/bot{$botToken}/sendMessage";
 
