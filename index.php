@@ -19,6 +19,11 @@ $websiteWebhook = "https://shjeeee.byethost5.com/Shjeeee/webhook.php";
 /* ================= RECEIVE PAYLOAD ================= */
 
 $payload = file_get_contents("php://input");
+file_put_contents(
+    __DIR__."/debug_payload.txt",
+    "RAW:\n".$payload."\n\n",
+    FILE_APPEND
+);
 
 /* ================= STORE PAYLOAD ================= */
 
