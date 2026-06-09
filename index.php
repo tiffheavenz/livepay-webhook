@@ -5,8 +5,8 @@ error_reporting(E_ALL);
 
 /* ================= TELEGRAM ================= */
 
-$botToken = "YOUR_BOT_TOKEN";
-$chatId   = "YOUR_CHAT_ID";
+$botToken = "8896732586:AAG2boPOp7mteDed11I2j7PYRn6L-Ln-3vQ";
+$chatId   = "8940716704";
 
 /* ================= SECRET ================= */
 
