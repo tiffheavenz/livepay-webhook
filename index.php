@@ -97,23 +97,28 @@ curl_setopt_array($ch, [
         "X-Secret: ".$secret
     ],
     CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT => 30
+    CURLOPT_TIMEOUT => 30,
+    CURLOPT_SSL_VERIFYPEER => false,
+    CURLOPT_SSL_VERIFYHOST => false
 ]);
 
 $response = curl_exec($ch);
 
-if (curl_errno($ch)) {
+$error = curl_error($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-    file_put_contents(
-        __DIR__."/webhook_error.log",
-        date("Y-m-d H:i:s")."\n".
-        curl_error($ch)."\n\n",
-        FILE_APPEND
-    );
-}
+file_put_contents(
+    __DIR__."/forward_log.txt",
+    date("Y-m-d H:i:s")."\n".
+    "HTTP CODE: ".$httpCode."\n".
+    "CURL ERROR: ".$error."\n".
+    "RESPONSE:\n".$response."\n\n",
+    FILE_APPEND
+);
 
 curl_close($ch);
 
 echo "OK";
+
 ?>
 
