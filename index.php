@@ -12,23 +12,20 @@ $chatId   = "8940716704";
 
 $secret = "MY_SUPER_SECRET_KEY";
 
-/* ================= WEBSITE WEBHOOK ================= */
+/* ================= SUPABASE CONNECTION ================= */
 
-$websiteWebhook = "https://shjeeee.byethost5.com/Shjeeee/webhook.php";
+$pdo = new PDO(
+    "pgsql:host=lxsddkbtbynekazmdsbh.supabase.co;port=5432;dbname=postgres",
+    "postgres",
+    "@Sheeee2024",
+    [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+    ]
+);
 
 /* ================= RECEIVE PAYLOAD ================= */
 
 $payload = file_get_contents("php://input");
-
-/* ================= STORE PAYLOAD ================= */
-
-file_put_contents(
-    __DIR__."/webhook_log.txt",
-    date("Y-m-d H:i:s")."\n".$payload."\n\n",
-    FILE_APPEND
-);
-
-/* ================= EMPTY REQUEST ================= */
 
 if (empty(trim($payload))) {
     exit("No payload");
@@ -56,7 +53,7 @@ if (json_last_error() !== JSON_ERROR_NONE) {
 $status    = strtoupper(trim($data['status'] ?? 'UNKNOWN'));
 $reference = trim($data['customer_reference'] ?? 'N/A');
 $number    = trim($data['msisdn'] ?? 'N/A');
-$amount    = number_format((float)($data['amount'] ?? 0));
+$amount    = (float)($data['amount'] ?? 0);
 $provider  = trim($data['provider'] ?? 'N/A');
 $message1  = trim($data['message'] ?? '');
 $time      = trim($data['completed_at'] ?? '');
@@ -75,8 +72,6 @@ $message .= "🏦 Provider: ".$provider."\n";
 $message .= "📝 Message: ".$message1."\n";
 $message .= "🕒 Time: ".$time;
 
-/* ================= SEND TELEGRAM ================= */
-
 file_get_contents(
     "https://api.telegram.org/bot{$botToken}/sendMessage?" .
     http_build_query([
@@ -85,81 +80,39 @@ file_get_contents(
     ])
 );
 
-/* ================= DON'T FORWARD FAILED PAYMENTS ================= */
+/* ================= FAILED PAYMENT ================= */
 
 if ($status !== "SUCCESS") {
-
-    file_put_contents(
-        __DIR__."/failed_log.txt",
-        date("Y-m-d H:i:s")."\n".$payload."\n\n",
-        FILE_APPEND
-    );
-
-    echo "FAILED PAYMENT - NOT FORWARDED";
+    echo "FAILED PAYMENT";
     exit;
 }
 
-/* ================= STORE SUCCESS TRANSACTION ================= */
+/* ================= INSERT INTO SUPABASE ================= */
 
-$file = __DIR__ . "/transactions.json";
+$stmt = $pdo->prepare("
+    INSERT INTO transactions 
+    (reference, status, amount, msisdn, provider, message, completed_at)
+    VALUES 
+    (:reference, :status, :amount, :msisdn, :provider, :message, :completed_at)
+    ON CONFLICT (reference)
+    DO UPDATE SET
+        status = EXCLUDED.status,
+        amount = EXCLUDED.amount,
+        msisdn = EXCLUDED.msisdn,
+        provider = EXCLUDED.provider,
+        message = EXCLUDED.message,
+        completed_at = EXCLUDED.completed_at
+");
 
-$transactions = [];
-
-if (file_exists($file)) {
-    $transactions = json_decode(file_get_contents($file), true) ?: [];
-}
-
-$transactions[$reference] = [
-    "status" => $status,
-    "amount" => $data['amount'] ?? 0,
-    "msisdn" => $number,
-    "provider" => $provider,
-    "completed_at" => $time
-];
-
-file_put_contents(
-    $file,
-    json_encode($transactions, JSON_PRETTY_PRINT)
-);
-
-/* ================= FORWARD SUCCESS TO WEBSITE ================= */
-
-$ch = curl_init($websiteWebhook);
-
-curl_setopt_array($ch, [
-    CURLOPT_POST => true,
-    CURLOPT_POSTFIELDS => $payload,
-    CURLOPT_HTTPHEADER => [
-        "Content-Type: application/json",
-        "X-Secret: ".$secret
-    ],
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT => 30
+$stmt->execute([
+    ":reference" => $reference,
+    ":status" => $status,
+    ":amount" => $amount,
+    ":msisdn" => $number,
+    ":provider" => $provider,
+    ":message" => $message1,
+    ":completed_at" => $time
 ]);
 
-$response = curl_exec($ch);
-
-if (curl_errno($ch)) {
-
-    file_put_contents(
-        __DIR__."/webhook_error.log",
-        date("Y-m-d H:i:s")."\n".
-        curl_error($ch)."\n\n",
-        FILE_APPEND
-    );
-
-} else {
-
-    file_put_contents(
-        __DIR__."/forward_log.txt",
-        date("Y-m-d H:i:s")."\n".
-        $response."\n\n",
-        FILE_APPEND
-    );
-}
-
-curl_close($ch);
-
 echo "OK";
-
 ?>
