@@ -99,6 +99,29 @@ if ($status !== "SUCCESS") {
     exit;
 }
 
+/* ================= STORE SUCCESS TRANSACTION ================= */
+
+$file = __DIR__ . "/transactions.json";
+
+$transactions = [];
+
+if (file_exists($file)) {
+    $transactions = json_decode(file_get_contents($file), true) ?: [];
+}
+
+$transactions[$reference] = [
+    "status" => $status,
+    "amount" => $data['amount'] ?? 0,
+    "msisdn" => $number,
+    "provider" => $provider,
+    "completed_at" => $time
+];
+
+file_put_contents(
+    $file,
+    json_encode($transactions, JSON_PRETTY_PRINT)
+);
+
 /* ================= FORWARD SUCCESS TO WEBSITE ================= */
 
 $ch = curl_init($websiteWebhook);
