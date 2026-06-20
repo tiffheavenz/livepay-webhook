@@ -8,14 +8,10 @@ error_reporting(E_ALL);
 $botToken = "8896732586:AAG2boPOp7mteDed11I2j7PYRn6L-Ln-3vQ";
 $chatId   = "8940716704";
 
-/* ================= SECRET ================= */
-
-$secret = "MY_SUPER_SECRET_KEY";
-
 /* ================= SUPABASE CONNECTION ================= */
 
 $pdo = new PDO(
-    "pgsql:host=lxsddkbtbynekazmdsbh.supabase.co;port=5432;dbname=postgres",
+    "pgsql:host=db.lxsddkbtbynekazmdsbh.supabase.co;port=5432;dbname=postgres",
     "postgres",
     "@Sheeee2024",
     [
@@ -80,14 +76,7 @@ file_get_contents(
     ])
 );
 
-/* ================= FAILED PAYMENT ================= */
-
-if ($status !== "SUCCESS") {
-    echo "FAILED PAYMENT";
-    exit;
-}
-
-/* ================= INSERT INTO SUPABASE ================= */
+/* ================= STORE ALL TRANSACTIONS (SUCCESS + FAILED) ================= */
 
 $stmt = $pdo->prepare("
     INSERT INTO transactions 
@@ -113,6 +102,8 @@ $stmt->execute([
     ":message" => $message1,
     ":completed_at" => $time
 ]);
+
+/* ================= RESPONSE ================= */
 
 echo "OK";
 ?>
