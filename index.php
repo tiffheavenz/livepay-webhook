@@ -5,15 +5,15 @@ error_reporting(E_ALL);
 
 /* ================= TELEGRAM ================= */
 
-$botToken = "8896732586:AAG2boPOp7mteDed11I2j7PYRn6L-Ln-3vQ";
-$chatId   = "8940716704";
+$botToken = "YOUR_BOT_TOKEN";
+$chatId   = "YOUR_CHAT_ID";
 
 /* ================= SUPABASE CONNECTION ================= */
 
 $pdo = new PDO(
     "pgsql:host=db.lxsddkbtbynekazmdsbh.supabase.co;port=5432;dbname=postgres",
     "postgres",
-    "@Sheeee2024",
+    "YOUR_SUPABASE_PASSWORD",
     [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
     ]
@@ -60,13 +60,13 @@ $title = ($status === "SUCCESS")
     ? "✅ PAYMENT STATUS: SUCCESS"
     : "❌ PAYMENT STATUS: FAILED";
 
-$message  = $title."\n\n";
-$message .= "📌 Reference: ".$reference."\n";
-$message .= "📱 Number: ".$number."\n";
-$message .= "💰 Amount: UGX ".$amount."\n";
-$message .= "🏦 Provider: ".$provider."\n";
-$message .= "📝 Message: ".$message1."\n";
-$message .= "🕒 Time: ".$time;
+$message  = $title . "\n\n";
+$message .= "📌 Reference: " . $reference . "\n";
+$message .= "📱 Number: " . $number . "\n";
+$message .= "💰 Amount: UGX " . number_format($amount) . "\n";
+$message .= "🏦 Provider: " . $provider . "\n";
+$message .= "📝 Message: " . $message1 . "\n";
+$message .= "🕒 Time: " . $time;
 
 file_get_contents(
     "https://api.telegram.org/bot{$botToken}/sendMessage?" .
@@ -76,12 +76,19 @@ file_get_contents(
     ])
 );
 
-/* ================= STORE ALL TRANSACTIONS (SUCCESS + FAILED) ================= */
+/* ================= IGNORE FAILED PAYMENTS ================= */
+
+if ($status !== "SUCCESS") {
+    echo "FAILED PAYMENT - NOT STORED";
+    exit;
+}
+
+/* ================= STORE SUCCESS TRANSACTION ================= */
 
 $stmt = $pdo->prepare("
-    INSERT INTO transactions 
+    INSERT INTO transactions
     (reference, status, amount, msisdn, provider, message, completed_at)
-    VALUES 
+    VALUES
     (:reference, :status, :amount, :msisdn, :provider, :message, :completed_at)
     ON CONFLICT (reference)
     DO UPDATE SET
@@ -103,7 +110,6 @@ $stmt->execute([
     ":completed_at" => $time
 ]);
 
-/* ================= RESPONSE ================= */
+echo "SUCCESS PAYMENT STORED";
 
-echo "OK";
 ?>
