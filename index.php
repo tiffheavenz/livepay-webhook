@@ -8,9 +8,11 @@ error_reporting(E_ALL);
 $botToken = "8896732586:AAG2boPOp7mteDed11I2j7PYRn6L-Ln-3vQ";
 $chatId   = "8940716704";
 
-/* ================= SUPABASE CONNECTION (FIXED FOR RENDER) ================= */
+/* ================= SUPABASE POOLER CONNECTION ================= */
+/* IMPORTANT: Replace YOUR_REAL_DB_PASSWORD with Supabase DB password */
 
 try {
+
     $pdo = new PDO(
         "pgsql:host=aws-0-eu-west-3.pooler.supabase.com;port=5432;dbname=postgres",
         "postgres.lxsddkbtbynekazmdsbh",
@@ -19,7 +21,10 @@ try {
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
         ]
     );
-} catch (Throwable $e) {
+
+} catch (PDOException $e) {
+
+    // Send DB error to Telegram
     file_get_contents(
         "https://api.telegram.org/bot{$botToken}/sendMessage?" .
         http_build_query([
@@ -27,15 +32,16 @@ try {
             "text" => "❌ DB CONNECTION FAILED\n" . $e->getMessage()
         ])
     );
-    exit("DB connection failed");
+
+    exit("DB CONNECTION FAILED");
 }
 
 /* ================= RECEIVE PAYLOAD ================= */
 
 $payload = file_get_contents("php://input");
 
-if (!$payload || trim($payload) === '') {
-    exit("No payload");
+if (empty(trim($payload))) {
+    exit("No payload received");
 }
 
 /* ================= DECODE JSON ================= */
@@ -79,6 +85,8 @@ $message .= "🏦 Provider: " . $provider . "\n";
 $message .= "📝 Message: " . $message1 . "\n";
 $message .= "🕒 Time: " . $time;
 
+/* SEND TO TELEGRAM */
+
 file_get_contents(
     "https://api.telegram.org/bot{$botToken}/sendMessage?" .
     http_build_query([
@@ -96,44 +104,31 @@ if ($status !== "SUCCESS") {
 
 /* ================= STORE SUCCESS TRANSACTION ================= */
 
-try {
+$stmt = $pdo->prepare("
+    INSERT INTO transactions
+    (reference, status, amount, msisdn, provider, message, completed_at)
+    VALUES
+    (:reference, :status, :amount, :msisdn, :provider, :message, :completed_at)
+    ON CONFLICT (reference)
+    DO UPDATE SET
+        status = EXCLUDED.status,
+        amount = EXCLUDED.amount,
+        msisdn = EXCLUDED.msisdn,
+        provider = EXCLUDED.provider,
+        message = EXCLUDED.message,
+        completed_at = EXCLUDED.completed_at
+");
 
-    $stmt = $pdo->prepare("
-        INSERT INTO transactions
-        (reference, status, amount, msisdn, provider, message, completed_at)
-        VALUES
-        (:reference, :status, :amount, :msisdn, :provider, :message, :completed_at)
-        ON CONFLICT (reference)
-        DO UPDATE SET
-            status = EXCLUDED.status,
-            amount = EXCLUDED.amount,
-            msisdn = EXCLUDED.msisdn,
-            provider = EXCLUDED.provider,
-            message = EXCLUDED.message,
-            completed_at = EXCLUDED.completed_at
-    ");
+$stmt->execute([
+    ":reference" => $reference,
+    ":status" => $status,
+    ":amount" => $amount,
+    ":msisdn" => $number,
+    ":provider" => $provider,
+    ":message" => $message1,
+    ":completed_at" => $time
+]);
 
-    $stmt->execute([
-        ":reference" => $reference,
-        ":status" => $status,
-        ":amount" => $amount,
-        ":msisdn" => $number,
-        ":provider" => $provider,
-        ":message" => $message1,
-        ":completed_at" => $time
-    ]);
+echo "SUCCESS PAYMENT STORED";
 
-    echo "SUCCESS PAYMENT STORED";
-
-} catch (Throwable $e) {
-
-    file_get_contents(
-        "https://api.telegram.org/bot{$botToken}/sendMessage?" .
-        http_build_query([
-            "chat_id" => $chatId,
-            "text" => "❌ DB INSERT ERROR\n" . $e->getMessage()
-        ])
-    );
-
-    exit("DB insert failed");
-}
+?>
